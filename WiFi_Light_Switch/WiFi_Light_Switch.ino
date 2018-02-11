@@ -2,11 +2,18 @@
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
+#include <ESP8266HTTPUpdateServer.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 #include <EEPROM.h>
 #include "config.h"
 
 extern const char* ssid;
 extern const char* password;
+extern char server_ip[];
+extern const char* ota_password;
+extern const char* ota_hostname;
+extern const int ota_port;
 String freemem = "";
 
 int state = HIGH;
@@ -15,19 +22,20 @@ int previous = LOW;
 
 long timevar = 0;
 long debounce = 200;
-extern char server_ip[];
-
-ESP8266WebServer server(80);
-WiFiClient client;
 
 const int led = 4;
 const int relay = 14;
 const int button = 12;
 
+ESP8266WebServer server(80);
+WiFiClient client;
+ESP8266HTTPUpdateServer httpUpdater;
+
+
 void handleRoot() {
   digitalWrite(led, 1);
   freemem = ESP.getFreeHeap();
-  server.send(200, "text/plain", "hello from esp8266! FreeMem: " + freemem); //+ " Remote IP: " + server.IP());
+  server.send(200, "text/plain", "hello from esp8266! FreeMem: " + freemem + " Remote IP: " + WiFi.localIP());
   digitalWrite(led, 0);
 }
 
@@ -59,37 +67,59 @@ void setup(void) {
   digitalWrite(led, 0);
   EEPROM.begin(1024);
   Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Serial.println("");
-
   Serial.print("Connected to ");
   Serial.println(ssid);
   Serial.println("");
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
+    delay(10000);
+    ESP.restart();
   }
   Serial.println("");
   Serial.print("Status: Connected ");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-  
-  if (MDNS.begin("esp8266")) {
+
+  httpUpdater.setup(&server);
+  server.begin();
+  if (MDNS.begin(ota_hostname)) {
     Serial.println("MDNS responder started");
   }
- 
-  server.on("/", handleRoot);
+  MDNS.addService("http", "tcp", 80);
+  // OTA PARAMS:
+  //ArduinoOTA.setPort(ota_port);
+  ArduinoOTA.setHostname(ota_hostname);
+  ArduinoOTA.setPassword(ota_password);
 
+  ArduinoOTA.onStart([]() {
+    Serial.println("Start");
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+
+  server.on("/", handleRoot);
   server.on("/reset", []() {
     server.send(200, "text/html", "<html><body><form action='/resetyes'><input type='submit' value='Restart ESP' name=''></form></body></html>");
     delay(1000);
   });
-
   server.on("/resetyes", []() {
     ESP.reset();
   });
-
   server.on("/gpio", []() {
     int stat = server.arg("st").toInt();
     int gpionum = server.arg("pin").toInt();
@@ -99,9 +129,7 @@ void setup(void) {
     Serial.println("GET GPIO: " + server.arg("pin") + " is now " + server.arg("st"));
     Serial.println("GPIO: " + server.arg("pin") + " is now " + digitalRead(gpionum));
   });
-
   server.onNotFound(handleNotFound);
-
   server.on("/light", []() {
     String turnlight = server.arg("turn");
     if (turnlight == "on") {
@@ -119,7 +147,8 @@ void setup(void) {
 
 void loop(void) {
   server.handleClient();
-  reading = digitalRead(button);
+  ArduinoOTA.handle();
+//  reading = digitalRead(button);
 //  if (reading == HIGH && previous == LOW && millis() - timevar > debounce) {
 //    if (state == HIGH) {
 //      state = LOW;
@@ -144,8 +173,8 @@ void loop(void) {
 //      timevar = millis();
 //    }
 //  }
-  digitalWrite(relay, state);
-  previous = reading;
+//  digitalWrite(relay, state);
+//  previous = reading;
 }
 
 //void saveeeprom(int num, int val){
