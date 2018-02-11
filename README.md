@@ -1,1 +1,1 @@
-ESP8266 Arduino IDE Scetchs for automation.
+ESP8266 Arduino IDE Sketchs for automation.
