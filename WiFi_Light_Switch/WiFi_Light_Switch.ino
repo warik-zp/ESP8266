@@ -3,9 +3,10 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <EEPROM.h>
+#include "config.h"
 
-const char* ssid = "espnet";
-const char* password = "12345678";
+extern const char* ssid;
+extern const char* password;
 String freemem = "";
 
 int state = HIGH;
@@ -14,7 +15,7 @@ int previous = LOW;
 
 long timevar = 0;
 long debounce = 200;
-char smarthome[] = "192.168.1.3";
+extern char server_ip[];
 
 ESP8266WebServer server(80);
 WiFiClient client;
@@ -26,7 +27,7 @@ const int button = 12;
 void handleRoot() {
   digitalWrite(led, 1);
   freemem = ESP.getFreeHeap();
-  server.send(200, "text/plain", "hello from esp8266! FreeMem: " + freemem + " Remote IP: " + server.remoteIP());
+  server.send(200, "text/plain", "hello from esp8266! FreeMem: " + freemem); //+ " Remote IP: " + server.IP());
   digitalWrite(led, 0);
 }
 
@@ -119,30 +120,30 @@ void setup(void) {
 void loop(void) {
   server.handleClient();
   reading = digitalRead(button);
-  if (reading == HIGH && previous == LOW && millis() - timevar > debounce) {
-    if (state == HIGH) {
-      state = LOW;
-        if (client.connect(smarthome, 80)) {
-          Serial.println("connected to server");
-          // Make a HTTP request:
-          client.println("GET //objects/?object=Lights-Room&op=set&p=Status&v=0 HTTP/1.1");
-          client.println("Host: WiFi-Light-Switch");
-          client.println("Connection: close");
-          client.println();
-        }
-    } else {
-       state = HIGH;
-        if (client.connect(smarthome, 80)) {
-          Serial.println("connected to server");
-          // Make a HTTP request:
-          client.println("GET //objects/?object=Lights-Room&op=set&p=Status&v=1 HTTP/1.1");
-          client.println("Host: WiFi-Light-Switch");
-          client.println("Connection: close");
-          client.println();
-        }
-      timevar = millis();
-    }
-  }
+//  if (reading == HIGH && previous == LOW && millis() - timevar > debounce) {
+//    if (state == HIGH) {
+//      state = LOW;
+//        if (client.connect(server_ip, 80)) {
+//          Serial.println("connected to server");
+//          // Make a HTTP request:
+//          client.println("GET //objects/?object=Lights-Room&op=set&p=Status&v=0 HTTP/1.1");
+//          client.println("Host: WiFi-Light-Switch");
+//          client.println("Connection: close");
+//          client.println();
+//        }
+//    } else {
+//       state = HIGH;
+//        if (client.connect(server_ip, 80)) {
+//          Serial.println("connected to server");
+//          // Make a HTTP request:
+//          client.println("GET //objects/?object=Lights-Room&op=set&p=Status&v=1 HTTP/1.1");
+//          client.println("Host: WiFi-Light-Switch");
+//          client.println("Connection: close");
+//          client.println();
+//        }
+//      timevar = millis();
+//    }
+//  }
   digitalWrite(relay, state);
   previous = reading;
 }
